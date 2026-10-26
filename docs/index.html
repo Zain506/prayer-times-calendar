@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Colindale Prayer Times Calendar</title>
+<meta name="description" content="Subscribe to Islamic Centre Colindale prayer times in Apple Calendar, Google Calendar, Outlook, Proton and any other calendar app.">
+<style>
+  :root {
+    --bg: #f7f5f0; --card: #ffffff; --text: #1d2a2a; --muted: #5d6b6b;
+    --accent: #0f6b5c; --accent-text: #ffffff; --line: #e2ddd2; --code: #f0ede5;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #121817; --card: #1b2321; --text: #e8eeec; --muted: #9fb0ac;
+      --accent: #3fb59e; --accent-text: #08201b; --line: #2c3835; --code: #222c2a;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+         font: 16px/1.55 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  main { max-width: 680px; margin: 0 auto; padding: 40px 16px 64px; }
+  h1 { font-size: 1.75rem; line-height: 1.2; margin: 0 0 8px; }
+  h2 { font-size: 1.1rem; margin: 0 0 8px; }
+  p { margin: 0 0 12px; }
+  .lede { color: var(--muted); margin-bottom: 28px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 14px;
+          padding: 20px; margin-bottom: 16px; }
+  .buttons { display: flex; flex-wrap: wrap; gap: 10px; margin: 4px 0 16px; }
+  .btn { display: inline-block; padding: 11px 16px; border-radius: 10px; text-decoration: none;
+         font-weight: 600; background: var(--accent); color: var(--accent-text); }
+  .btn.secondary { background: transparent; color: var(--accent); border: 1.5px solid var(--accent); }
+  .copy { display: flex; gap: 8px; }
+  .copy input { flex: 1; min-width: 0; padding: 10px 12px; border-radius: 10px;
+                border: 1px solid var(--line); background: var(--code); color: var(--text);
+                font: 14px ui-monospace, SFMono-Regular, Menlo, monospace; }
+  .copy button { padding: 10px 14px; border-radius: 10px; border: 0; cursor: pointer;
+                 background: var(--accent); color: var(--accent-text); font-weight: 600; }
+  ol { margin: 0; padding-left: 20px; }
+  li { margin-bottom: 4px; }
+  .note { color: var(--muted); font-size: 0.92rem; }
+  code { background: var(--code); padding: 1px 5px; border-radius: 5px; font-size: 0.9em; }
+  footer { color: var(--muted); font-size: 0.85rem; margin-top: 28px; }
+  a { color: var(--accent); }
+</style>
+</head>
+<body>
+<main>
+  <h1>Prayer Times Calendar</h1>
+  <p class="lede">Daily prayer start and jamaat times for Islamic Centre Colindale, as a calendar you
+    subscribe to once. It updates itself every week and switches between GMT and BST automatically.</p>
+
+  <section class="card">
+    <h2>Subscribe</h2>
+    <div class="buttons">
+      <a class="btn" id="webcal" href="#">Apple Calendar / Outlook desktop</a>
+      <a class="btn secondary" id="google" href="#" target="_blank" rel="noopener">Google Calendar</a>
+    </div>
+    <p class="note">For any other app, copy this link and add it as a calendar “from URL” / “from the web”:</p>
+    <div class="copy">
+      <input id="feed" readonly aria-label="Calendar link">
+      <button id="copybtn" type="button">Copy</button>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>iPhone, iPad and Mac</h2>
+    <ol>
+      <li>Tap the <strong>Apple Calendar</strong> button above and confirm <strong>Subscribe</strong>.</li>
+      <li>Or on iPhone: Settings → Calendar → Accounts → Add Account → Other → <strong>Add Subscribed Calendar</strong>, and paste the link.</li>
+    </ol>
+  </section>
+
+  <section class="card">
+    <h2>Google Calendar (and Android)</h2>
+    <ol>
+      <li>On a computer, use the <strong>Google Calendar</strong> button, or go to calendar.google.com → <strong>+</strong> next to “Other calendars” → <strong>From URL</strong> and paste the link.</li>
+      <li>On Android it then appears in the Google Calendar app. If not: app Settings → tap the calendar → turn on <strong>Sync</strong>.</li>
+    </ol>
+    <p class="note">Google refreshes subscribed calendars on its own schedule, which can take up to a day.</p>
+  </section>
+
+  <section class="card">
+    <h2>Outlook</h2>
+    <ol>
+      <li><strong>Outlook on the web / new Outlook:</strong> Calendar → Add calendar → <strong>Subscribe from web</strong>, paste the link.</li>
+      <li><strong>Classic Outlook for Windows:</strong> use the Apple Calendar / Outlook button above, or Home → Add Calendar → <strong>From Internet</strong>.</li>
+    </ol>
+  </section>
+
+  <section class="card">
+    <h2>Proton Calendar</h2>
+    <ol>
+      <li><strong>+</strong> next to “My calendars” → <strong>Add calendar from URL</strong>, paste the link.</li>
+    </ol>
+  </section>
+
+  <section class="card">
+    <h2>What’s in it</h2>
+    <p>Each prayer is one event from its start time to its jamaat time, e.g. “Fajr · jamaat 05:45”.
+      Sunrise is a short marker, and Fridays show the Jumu’ah jamaat times. Events are marked free,
+      so they don’t block your availability.</p>
+    <p class="note">Set alerts in your calendar app’s settings for this calendar if you want reminders.
+      Times come from the mosque’s published timetable; always follow the mosque’s notices if they differ.</p>
+  </section>
+
+  <footer>
+    Source: <a href="https://islamiccentrecolindale.org/">islamiccentrecolindale.org</a>
+    (timetable published by Islamic Centre Edgware). Not an official mosque service.
+    <a href="https://github.com/Zain506/prayer-times-calendar">How it works</a>
+  </footer>
+</main>
+<script>
+  // Build the links from wherever this page is hosted, so they stay correct if the repo moves.
+  var base = location.href.replace(/[#?].*$/, "").replace(/index\.html$/, "");
+  if (!base.endsWith("/")) base += "/";
+  var https = base + "prayer-times.ics";
+  var webcal = https.replace(/^https?:/, "webcal:");
+  document.getElementById("feed").value = https;
+  document.getElementById("webcal").href = webcal;
+  document.getElementById("google").href =
+    "https://calendar.google.com/calendar/render?cid=" + encodeURIComponent(webcal);
+  document.getElementById("copybtn").addEventListener("click", function () {
+    var input = document.getElementById("feed"), btn = this;
+    function done() { btn.textContent = "Copied"; setTimeout(function () { btn.textContent = "Copy"; }, 1500); }
+    if (navigator.clipboard) {
+      navigator.clipboard.writeText(input.value).then(done, function () { input.select(); });
+    } else { input.select(); try { document.execCommand("copy"); done(); } catch (e) {} }
+  });
+</script>
+</body>
+</html>
