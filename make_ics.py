@@ -82,7 +82,7 @@ def jumuah_times(day):
     if times is None:
         noon = datetime(day.year, day.month, day.day, 12, tzinfo=ZoneInfo(TZ))
         times = JUMUAH["BST" if noon.dst() else "GMT"]
-    return sorted(hm(t) for t in times)
+    return sorted({hm(t) for t in times})
 
 
 def esc(text):
