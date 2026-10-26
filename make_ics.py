@@ -20,11 +20,21 @@ import io
 import sys
 import urllib.request
 from datetime import date, datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 
 TZ = "Europe/London"
 SOURCE = "https://islamiccentrecolindale.org/ (timetable published at islamiccentreedgware.org)"
-# Jumu'ah jamaat times as listed on the Islamic Centre Edgware homepage.
-JUMUAH = "12:30, 13:05 and 13:30"
+# Jumu'ah jamaat start times as listed on the Islamic Centre Edgware homepage.
+# The mosque changes how many jamaats it holds through the year, so the list
+# is kept per clock season; a list can have any number of times.
+JUMUAH = {
+    "GMT": ["12:30", "13:05", "13:30"],  # late October to late March
+    "BST": ["12:30", "13:05", "13:30"],  # late March to late October
+}
+# One-off Fridays that differ from the season (e.g. Eid, or a mosque notice):
+# "2026-12-25": ["13:00", "13:45"]. An empty list means no Jumu'ah events.
+JUMUAH_DATES = {}
+JUMUAH_MINUTES = 30  # khutbah + salah; cut short if the next jamaat starts sooner
 
 VTIMEZONE = """BEGIN:VTIMEZONE
 TZID:Europe/London
@@ -66,6 +76,15 @@ def ical_dt(d):
     return d.strftime("%Y%m%dT%H%M%S")
 
 
+def jumuah_times(day):
+    """Jumu'ah jamaat start times for a Friday, as sorted (h, m) tuples."""
+    times = JUMUAH_DATES.get(day.isoformat())
+    if times is None:
+        noon = datetime(day.year, day.month, day.day, 12, tzinfo=ZoneInfo(TZ))
+        times = JUMUAH["BST" if noon.dst() else "GMT"]
+    return sorted(hm(t) for t in times)
+
+
 def esc(text):
     return text.replace("\\", "\\\\").replace(";", "\\;").replace(",", "\\,").replace("\n", "\\n")
 
@@ -95,6 +114,29 @@ def event(uid, start, end, summary, description, stamp):
         "TRANSP:TRANSPARENT",  # don't mark you as busy
         "END:VEVENT",
     ]
+
+
+def jumuah_events(day, zuhr_begins, stamp):
+    """One event per Jumu'ah jamaat, each blocking out its own slot."""
+    # Jumu'ah can't be before Zuhr begins, so drop any jamaat the season's
+    # list puts too early for this Friday.
+    times = [t for t in jumuah_times(day) if not zuhr_begins or t >= zuhr_begins]
+    listed = ", ".join(fmt(t) for t in times)
+    events = []
+    for i, t in enumerate(times):
+        start = dt(day, t)
+        end = start + timedelta(minutes=JUMUAH_MINUTES)
+        if i + 1 < len(times):
+            end = min(end, dt(day, times[i + 1]))
+        title = "Jumu'ah" if len(times) == 1 else f"Jumu'ah {i + 1} of {len(times)}"
+        desc = f"Jamaat {fmt(t)}"
+        if zuhr_begins:
+            desc += f" · Zuhr begins {fmt(zuhr_begins)}"
+        desc += f"\nAll jamaats today: {listed} (check notices for changes)"
+        desc += f"\nSource: {SOURCE}"
+        events.append(event(f"{day.isoformat()}-jumuah-{i + 1}@colindale-prayer-times",
+                            start, end, f"{title} · {fmt(t)}", desc, stamp))
+    return events
 
 
 def build(rows, start_from=None):
@@ -130,6 +172,11 @@ def build(rows, start_from=None):
             begins, jamaat = hm(r.get(b_key)), hm(r.get(j_key))
             if not begins and not jamaat:
                 continue
+            if name == "Zuhr" and friday:
+                for ev in jumuah_events(day, begins, stamp):
+                    lines += ev
+                    count += 1
+                continue
             # In midsummer the plugin stores Isha as 00:00 (no true darkness);
             # if "begins" is missing or after the jamaat, anchor on the jamaat.
             if begins and jamaat and dt(day, begins) > dt(day, jamaat):
@@ -145,11 +192,7 @@ def build(rows, start_from=None):
                     end = start + timedelta(minutes=5)
                 desc = f"Begins {fmt(begins)}" + (f" · Jamaat {fmt(jamaat)}" if jamaat else "")
             title = name
-            if name == "Zuhr" and friday:
-                desc += f"\nJumu'ah jamaats: {JUMUAH} (check notices for changes)"
-            if name == "Zuhr" and friday:
-                title = f"Jumu'ah · {JUMUAH.replace(' and ', ', ')}"
-            elif jamaat:
+            if jamaat:
                 title += f" · jamaat {fmt(jamaat)}"
             if name == "Fajr" and sunrise:
                 desc += f"\nSunrise {fmt(sunrise)} (Fajr ends)"

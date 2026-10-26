@@ -14,7 +14,10 @@ else that can subscribe to an iCalendar (`.ics`) link.
 
 - Each prayer is one event from **start time → jamaat time**, e.g.
   `Fajr · jamaat 05:45` from 04:51 to 05:45.
-- Sunrise is a short marker event; Fridays show the Jumu'ah jamaat times.
+- Sunrise is a short marker event.
+- On Fridays, Zuhr is replaced by one event per Jumu'ah jamaat (e.g.
+  `Jumu'ah 1 of 3 · 12:30` from 12:30 to 13:00), so each jamaat fills its own
+  slot in your calendar.
 - Events are marked "free", so they never block your availability.
 - Times are tagged `Europe/London`, so GMT/BST is handled by your calendar app
   automatically.
@@ -60,6 +63,10 @@ python make_ics.py --url "https://islamiccentreedgware.org/wp-json/dpt/v1/prayer
   each Asr event's notes.
 - In midsummer the timetable lists Isha as 00:00 (no full darkness), so those
   days' Isha event is placed at the jamaat time instead.
-- The Jumu'ah times are the ones on the Edgware homepage — edit `JUMUAH` in
-  `make_ics.py` if Colindale's differ.
+- The Jumu'ah times are the ones on the Edgware homepage. They live in
+  `JUMUAH` in `make_ics.py`, with a separate list for GMT and BST so the
+  number of jamaats can change with the season; `JUMUAH_DATES` overrides a
+  single Friday (Eid, a notice from the mosque). Each block lasts
+  `JUMUAH_MINUTES` (30), cut short if the next jamaat starts sooner, and any
+  jamaat listed before Zuhr begins that day is left out.
 - Not an official mosque service; follow the mosque's notices if anything differs.
