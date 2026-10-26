@@ -34,7 +34,6 @@ JUMUAH = {
 # One-off Fridays that differ from the season (e.g. Eid, or a mosque notice):
 # "2026-12-25": ["13:00", "13:45"]. An empty list means no Jumu'ah events.
 JUMUAH_DATES = {}
-JUMUAH_MINUTES = 30  # khutbah + salah; cut short if the next jamaat starts sooner
 
 VTIMEZONE = """BEGIN:VTIMEZONE
 TZID:Europe/London
@@ -117,17 +116,23 @@ def event(uid, start, end, summary, description, stamp):
 
 
 def jumuah_events(day, zuhr_begins, stamp):
-    """One event per Jumu'ah jamaat, each blocking out its own slot."""
+    """One event per Jumu'ah jamaat, laid out like the other prayers: Zuhr
+    begins -> 1st jamaat, then 1st -> 2nd jamaat, and so on."""
     # Jumu'ah can't be before Zuhr begins, so drop any jamaat the season's
     # list puts too early for this Friday.
     times = [t for t in jumuah_times(day) if not zuhr_begins or t >= zuhr_begins]
     listed = ", ".join(fmt(t) for t in times)
     events = []
+    prev = zuhr_begins
     for i, t in enumerate(times):
-        start = dt(day, t)
-        end = start + timedelta(minutes=JUMUAH_MINUTES)
-        if i + 1 < len(times):
-            end = min(end, dt(day, times[i + 1]))
+        end = dt(day, t)
+        if prev is None:
+            start = end
+            end = start + timedelta(minutes=15)
+        else:
+            start = dt(day, prev)
+            if end <= start:
+                end = start + timedelta(minutes=5)
         title = "Jumu'ah" if len(times) == 1 else f"Jumu'ah {i + 1} of {len(times)}"
         desc = f"Jamaat {fmt(t)}"
         if zuhr_begins:
@@ -135,7 +140,8 @@ def jumuah_events(day, zuhr_begins, stamp):
         desc += f"\nAll jamaats today: {listed} (check notices for changes)"
         desc += f"\nSource: {SOURCE}"
         events.append(event(f"{day.isoformat()}-jumuah-{i + 1}@colindale-prayer-times",
-                            start, end, f"{title} · {fmt(t)}", desc, stamp))
+                            start, end, f"{title} · jamaat {fmt(t)}", desc, stamp))
+        prev = t
     return events
 
 
