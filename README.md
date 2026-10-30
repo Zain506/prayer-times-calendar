@@ -42,8 +42,13 @@ day to show changes.
   points to the Islamic Centre Edgware site, which publishes it through the
   "Daily Prayer Time" WordPress plugin) and turns it into a standard
   iCalendar file. Standard library Python only.
-- `.github/workflows/build-calendar.yml` runs it every Monday (or by hand from
-  the **Actions** tab) and commits `docs/prayer-times.ics`.
+- It also reads the Jumu'ah jamaat times from the Edgware homepage and saves
+  them to `data/jumuah.json`. If the homepage can't be read, the last saved
+  times are used, the run shows a warning, and `data/jumuah.json` notes the
+  error (`last_error`, `last_error_at`).
+- `.github/workflows/build-calendar.yml` runs it every Monday, on every push to
+  `main`, and by hand from the **Actions** tab, then commits
+  `docs/prayer-times.ics` and `data/jumuah.json`.
 - GitHub Pages serves the `docs/` folder, giving the public link above.
 
 The feed keeps a week of history plus everything ahead, to stay small.
@@ -63,9 +68,8 @@ python make_ics.py --url "https://islamiccentreedgware.org/wp-json/dpt/v1/prayer
   each Asr event's notes.
 - In midsummer the timetable lists Isha as 00:00 (no full darkness), so those
   days' Isha event is placed at the jamaat time instead.
-- The Jumu'ah times are the ones on the Edgware homepage. They live in
-  `JUMUAH` in `make_ics.py`, with a separate list for GMT and BST so the
-  number of jamaats can change with the season; `JUMUAH_DATES` overrides a
-  single Friday (Eid, a notice from the mosque). Any jamaat listed
-  before Zuhr begins that day is left out.
+- The Jumu'ah times are whatever the Edgware homepage lists when the
+  calendar is built, however many jamaats there are, and they apply to every
+  Friday in the feed until the next rebuild. Any jamaat listed before Zuhr
+  begins that day is left out.
 - Not an official mosque service; follow the mosque's notices if anything differs.

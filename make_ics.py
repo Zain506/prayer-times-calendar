@@ -8,6 +8,10 @@ Usage:
   python make_ics.py --url "https://islamiccentreedgware.org/wp-json/dpt/v1/prayertime?filter=download_timetable" -o prayer-times.ics
   Add --from 2026-10-26 to skip earlier days.
 
+Jumu'ah times aren't in the timetable, so each run also reads them from the
+mosque's homepage and saves them to data/jumuah.json. If the homepage can't
+be read, the last saved times are used and a warning is raised.
+
 The timetable already gives local clock times (GMT in winter, BST in
 summer), so every event is tagged TZID=Europe/London and any calendar app
 shows the right time on both sides of the clock change.
@@ -17,23 +21,20 @@ Standard library only.
 import argparse
 import csv
 import io
+import json
+import os
+import re
 import sys
 import urllib.request
 from datetime import date, datetime, timedelta, timezone
-from zoneinfo import ZoneInfo
+from html.parser import HTMLParser
 
 TZ = "Europe/London"
 SOURCE = "https://islamiccentrecolindale.org/ (timetable published at islamiccentreedgware.org)"
-# Jumu'ah jamaat start times as listed on the Islamic Centre Edgware homepage.
-# The mosque changes how many jamaats it holds through the year, so the list
-# is kept per clock season; a list can have any number of times.
-JUMUAH = {
-    "GMT": ["12:30", "13:05", "13:30"],  # late October to late March
-    "BST": ["12:30", "13:05", "13:30"],  # late March to late October
-}
-# One-off Fridays that differ from the season (e.g. Eid, or a mosque notice):
-# "2026-12-25": ["13:00", "13:45"]. An empty list means no Jumu'ah events.
-JUMUAH_DATES = {}
+# The homepage lists the Jumu'ah jamaats; however many it shows are used.
+JUMUAH_URL = "https://islamiccentreedgware.org/"
+JUMUAH_FILE = "data/jumuah.json"  # last times read, used if a read fails
+UA = {"User-Agent": "prayer-times-ics/1.0"}
 
 VTIMEZONE = """BEGIN:VTIMEZONE
 TZID:Europe/London
@@ -75,13 +76,109 @@ def ical_dt(d):
     return d.strftime("%Y%m%dT%H%M%S")
 
 
-def jumuah_times(day):
-    """Jumu'ah jamaat start times for a Friday, as sorted (h, m) tuples."""
-    times = JUMUAH_DATES.get(day.isoformat())
-    if times is None:
-        noon = datetime(day.year, day.month, day.day, 12, tzinfo=ZoneInfo(TZ))
-        times = JUMUAH["BST" if noon.dst() else "GMT"]
-    return sorted({hm(t) for t in times})
+class PageText(HTMLParser):
+    """Visible text of a page, one line per block element."""
+    BLOCKS = {"br", "p", "div", "li", "tr", "td", "th", "h1", "h2", "h3", "h4",
+              "h5", "h6", "section", "article", "table", "ul", "ol", "span"}
+
+    def __init__(self):
+        super().__init__()
+        self.parts, self.skip = [], 0
+
+    def handle_starttag(self, tag, attrs):
+        if tag in ("script", "style", "noscript"):
+            self.skip += 1
+        elif tag in self.BLOCKS:
+            self.parts.append("\n")
+
+    def handle_endtag(self, tag):
+        if tag in ("script", "style", "noscript"):
+            self.skip = max(0, self.skip - 1)
+        elif tag in self.BLOCKS:
+            self.parts.append("\n")
+
+    def handle_data(self, data):
+        if not self.skip:
+            self.parts.append(data)
+
+    def lines(self):
+        text = "".join(self.parts).replace("\xa0", " ")
+        return [" ".join(l.split()) for l in text.split("\n") if l.strip()]
+
+
+JUM = re.compile(r"\bj[uo]m+[u']*['’`]?a?h?\b|\bjum[ua]", re.I)
+OTHER_PRAYER = re.compile(r"\b(fajr|sunrise|shuruq|zuhr|dhuhr|zohr|asr|maghrib|isha)\b", re.I)
+TIME = re.compile(r"\b(\d{1,2})[:.](\d{2})\s*([ap]\.?m\.?)?", re.I)
+
+
+def parse_jumuah(html):
+    """Jamaat times listed next to a Jumu'ah label, as sorted 'HH:MM' strings,
+    plus the text they were read from."""
+    p = PageText()
+    p.feed(html)
+    lines = p.lines()
+    found, snippet = set(), []
+    for i, line in enumerate(lines):
+        m = JUM.search(line)
+        if not m:
+            continue
+        # Read on from the label until another prayer's name comes up.
+        window = [line[m.end():]] + lines[i + 1:i + 6]
+        for j, text in enumerate(window):
+            stop = OTHER_PRAYER.search(text)
+            if stop:
+                window[j] = text[:stop.start()]
+                window = window[:j + 1]
+                break
+        for text in window:
+            for h, mi, ampm in TIME.findall(text):
+                h, mi = int(h), int(mi)
+                if ampm.lower().startswith("p") and h < 12 or not ampm and h <= 6:
+                    h += 12
+                if 11 <= h <= 15 and mi < 60:  # Jumu'ah is always around midday
+                    found.add(f"{h:02d}:{mi:02d}")
+                    snippet.append(text.strip())
+    return sorted(found), " | ".join(dict.fromkeys(snippet))
+
+
+def warn(msg):
+    """Note a problem in the log and, under GitHub Actions, on the run page."""
+    print(f"WARNING: {msg}", file=sys.stderr)
+    if os.environ.get("GITHUB_ACTIONS"):
+        print(f"::warning title=Jumu'ah times::{msg}")
+    summary = os.environ.get("GITHUB_STEP_SUMMARY")
+    if summary:
+        with open(summary, "a", encoding="utf-8") as f:
+            f.write(f"⚠️ {msg}\n\n")
+
+
+def load_jumuah(url, path):
+    """Read the Jumu'ah times from the homepage and save them; if that fails,
+    fall back to the last saved times. Returns sorted (h, m) tuples."""
+    saved = {}
+    if os.path.exists(path):
+        with open(path, encoding="utf-8") as f:
+            saved = json.load(f)
+    now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    try:
+        req = urllib.request.Request(url, headers=UA)
+        html = urllib.request.urlopen(req, timeout=60).read().decode("utf-8", "replace")
+        times, snippet = parse_jumuah(html)
+        if not times:
+            raise ValueError("no Jumu'ah times found on the page")
+        print(f"Jumu'ah times read from {url}: {', '.join(times)} (from: {snippet[:300]})")
+        saved = {"times": times, "read_at": now, "source": url}
+    except Exception as e:
+        if not saved.get("times"):
+            sys.exit(f"Couldn't read Jumu'ah times from {url} ({e}) and none are saved in {path}")
+        warn(f"Couldn't read Jumu'ah times from {url} ({e}); using the times saved "
+             f"on {saved['read_at'][:10]}: {', '.join(saved['times'])}")
+        saved.update(last_error=str(e), last_error_at=now)
+    os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(saved, f, indent=2)
+        f.write("\n")
+    return sorted({hm(t) for t in saved["times"]})
 
 
 def esc(text):
@@ -115,12 +212,12 @@ def event(uid, start, end, summary, description, stamp):
     ]
 
 
-def jumuah_events(day, zuhr_begins, stamp):
+def jumuah_events(day, zuhr_begins, jumuah, stamp):
     """One event per Jumu'ah jamaat, laid out like the other prayers: Zuhr
     begins -> 1st jamaat, then 1st -> 2nd jamaat, and so on."""
-    # Jumu'ah can't be before Zuhr begins, so drop any jamaat the season's
-    # list puts too early for this Friday.
-    times = [t for t in jumuah_times(day) if not zuhr_begins or t >= zuhr_begins]
+    # Jumu'ah can't be before Zuhr begins, so drop any jamaat listed too early
+    # for this Friday.
+    times = [t for t in jumuah if not zuhr_begins or t >= zuhr_begins]
     listed = ", ".join(fmt(t) for t in times)
     events = []
     prev = zuhr_begins
@@ -145,7 +242,7 @@ def jumuah_events(day, zuhr_begins, stamp):
     return events
 
 
-def build(rows, start_from=None):
+def build(rows, jumuah, start_from=None):
     stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     lines = [
         "BEGIN:VCALENDAR",
@@ -179,7 +276,7 @@ def build(rows, start_from=None):
             if not begins and not jamaat:
                 continue
             if name == "Zuhr" and friday:
-                for ev in jumuah_events(day, begins, stamp):
+                for ev in jumuah_events(day, begins, jumuah, stamp):
                     lines += ev
                     count += 1
                 continue
@@ -226,11 +323,13 @@ def main():
     src.add_argument("--csv", help="timetable CSV file")
     src.add_argument("--url", help="URL returning the timetable CSV")
     ap.add_argument("--from", dest="start_from", help="first date to include, YYYY-MM-DD")
+    ap.add_argument("--jumuah-url", default=JUMUAH_URL, help="page listing the Jumu'ah times")
+    ap.add_argument("--jumuah-file", default=JUMUAH_FILE, help="where the last Jumu'ah times are saved")
     ap.add_argument("-o", "--out", default="prayer-times.ics")
     a = ap.parse_args()
 
     if a.url:
-        req = urllib.request.Request(a.url, headers={"User-Agent": "prayer-times-ics/1.0"})
+        req = urllib.request.Request(a.url, headers=UA)
         text = urllib.request.urlopen(req, timeout=60).read().decode("utf-8-sig")
     else:
         with open(a.csv, encoding="utf-8-sig") as f:
@@ -241,7 +340,8 @@ def main():
     rows.sort(key=lambda r: r["d_date"])
 
     start = date.fromisoformat(a.start_from) if a.start_from else None
-    ics, n = build(rows, start)
+    jumuah = load_jumuah(a.jumuah_url, a.jumuah_file)
+    ics, n = build(rows, jumuah, start)
     with open(a.out, "w", encoding="utf-8", newline="") as f:
         f.write(ics)
     print(f"Wrote {n} events ({rows[0]['d_date'][:10]} to {rows[-1]['d_date'][:10]}) to {a.out}")
